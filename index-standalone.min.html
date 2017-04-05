@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.3/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.0.3/dist/leaflet.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+    <style>
+        #map {
+            position: absolute;
+            top: 0px;
+            left: 0px;
+            bottom: 0px;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #scan {
+            position: absolute;
+            top: 20px;
+            left: 100px;
+            z-index: 10;
+        }
+        
+        .info {
+            padding: 6px 8px;
+            font: 14px/16px Arial, Helvetica, sans-serif;
+            background: white;
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+        }
+        
+        .info h4 {
+            margin: 0 0 5px;
+            color: #777;
+        }
+    </style>
+
+</head>
+
+<body>
+    <div id="map"></div>
+
+
+
+    <script>
+        "use strict"
+
+
+        var map = L.map('map');
+        map.setView([53.232, 6.569], 16);
+
+        // load OpenStreetMap basemap
+        var basemap = L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png');
+        basemap.addTo(map);
+
+        L.tileLayer.wms('https://geodata.nationaalgeoregister.nl/kadastralekaartv3/wms?', {
+            layers: 'kadastralekaartv3:kadastralegrens',
+            format: 'image/png',
+            transparent: true,
+            version: '1.0.0',
+            attribution: "www.nationaalgeoregister.nl",
+            maxZoom: 20,
+            minZoom: 16
+        }).addTo(map);
+
+
+        var geoJson = L.geoJson(undefined, { onEachFeature: onEachFeature });
+        geoJson.addTo(map);
+
+        var geoJson2 = L.geoJson(undefined, { onEachFeature: onEachFeature2 });
+        geoJson2.addTo(map);
+
+        map.locate({ setView: true, maxZoom: 30 });
+
+        map.on("moveend", function () {
+            console.log(map.getZoom())
+            if (map.getZoom() < 17) {
+                geoJson.clearLayers();
+                return;
+            }
+            var viewBounds = map.getBounds();
+            var url = 'https://geodata.nationaalgeoregister.nl/kadastralekaartv3/wfs?';
+            var params = 'service=wfs&';
+            params += 'version=3.0.0&';
+            params += 'request=GetFeature&';
+            params += 'typeName=kadastralekaartv3:perceel&';
+            params += 'outputFormat=json&';
+            params += 'srsName=EPSG:4326&';
+            params += `BBOX=${viewBounds._southWest.lng},${viewBounds._southWest.lat},${viewBounds._northEast.lng},${viewBounds._northEast.lat},EPSG:4326&`;
+            params += 'count=200';
+            $.getJSON(url + params, function (data) {
+                console.log(data);
+                geoJson.clearLayers();
+                geoJson.addData(data.features);
+            });
+        });
+
+        map.locate({ setView: true, maxZoom: 30 });
+
+        //---------------------------------------------------------------------------------------------------------------------------------//
+
+        function onEachFeature(feature, layer) {
+            if (feature.properties) {
+                layer.bindPopup(
+                    (feature.properties.kadastraleGemeenteCode || "")
+                    + "\n" + (feature.properties.type || "")
+                    + "\n" + (feature.properties.kadastralegrootte || "")
+                    + "\n" + (feature.properties.logischtijdstipOntstaan || "")
+                    + "\n" + (feature.properties.logischtijdstipVervallen || "")
+                    + "\n" + (feature.properties.lokaalID || "")
+                    + "\n" + (feature.properties.perceelnummer || "")
+                    + "\n" + (feature.properties.perceelnummer_deltax || "")
+                    + "\n" + (feature.properties.perceelnummer_rotatie || "")
+                    + "\n" + (feature.properties.sectie || "")
+                );
+            }
+            if (feature.geometry_name === "plaatscoordinaten") {
+                layer.on({
+                    click: highlightFeature
+                });
+            }
+        }
+        function onEachFeature2(feature, layer) {
+
+        }
+
+        var info = L.control();
+
+        info.onAdd = function (map) {
+            this._div = L.DomUtil.create('div', 'info'); // create a div with a class "info"
+            this.update();
+            return this._div;
+        };
+
+        // method that we will use to update the control based on feature properties passed
+        info.update = function (props) {
+            console.log(props);
+            var content = "";
+            if (props) {
+                content += "<h4>Eigenschappen:</h4>";
+                for (let p in props) {
+                    content += ("<br />" + p + ": " + props[p]);
+                }
+            }
+            else {
+                this._div.innerHTML = "<br />Selecteer een perceel";
+            }
+
+            this._div.innerHTML = content;
+        };
+
+        info.addTo(map);
+
+
+
+        //---------------------------------------------------------------------------------------------------------------------------------//
+
+        function highlightFeature(e) {
+
+            resetHighlight(e);
+            var target = geoJson2.addData(e.target.feature.properties.begrenzingperceel);
+
+            map.fitBounds(target.getBounds());
+            info.update(e.target.feature.properties);
+        }
+
+        function resetHighlight(e) {
+            info.update();
+            geoJson2.clearLayers();
+        }
+
+    </script>
+
+</body>
+
+</html>
